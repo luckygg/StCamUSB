@@ -1,0 +1,534 @@
+#include "StdAfx.h"
+#include "StCamUSB.h"
+
+CStUSbInterface::CStUSbInterface(void)
+{
+
+}
+
+CStUSbInterface::~CStUSbInterface(void)
+{
+
+}
+
+int CStUSbInterface::GetDeviceCount()
+{
+	m_arrCamInfo.RemoveAll();
+
+	HANDLE hCamera = INVALID_HANDLE_VALUE;
+	do{
+		hCamera = StTrg_Open();
+		if(INVALID_HANDLE_VALUE != hCamera)
+		{
+			StInterfaceInfo stInfo;
+			DWORD	dwCameraID;
+			TCHAR	szCameraID[MAX_PATH];
+			memset(szCameraID, 0, sizeof(TCHAR) * MAX_PATH);
+			
+			StTrg_ReadCameraUserID(hCamera, &dwCameraID, szCameraID, MAX_PATH);
+
+			stInfo.hCamera = hCamera;
+			stInfo.strName = (LPCTSTR)szCameraID;
+			m_arrCamInfo.Add(stInfo);
+		}
+	}while(INVALID_HANDLE_VALUE != hCamera);
+
+	int nCnt = m_arrCamInfo.GetSize();
+
+	for (int i=0; i<nCnt; i++)
+		StTrg_Close(m_arrCamInfo.GetAt(i).hCamera);
+
+	return nCnt;
+}
+
+bool CStUSbInterface::GetDeviceName(int nIndex, CString &strValue)
+{
+	int nMax = m_arrCamInfo.GetSize();
+	if (nIndex >= nMax)
+	{
+		strValue = L"Index is bigger than current max count.";
+		return false;
+	}
+
+	strValue = m_arrCamInfo.GetAt(nIndex).strName;
+
+	return true;
+}
+
+CStUsbCam::CStUsbCam(void)
+{
+	m_hCamera = INVALID_HANDLE_VALUE;
+	m_bConnected = false;
+	m_bActived = false;
+	m_strName = L"";
+	m_pBuffer = NULL;
+
+	m_hGrabDone = CreateEvent(NULL, TRUE, FALSE, NULL);
+	ResetEvent(m_hGrabDone);
+}
+
+CStUsbCam::~CStUsbCam(void)
+{
+	OnDisconnect();
+
+	if (m_pBuffer != NULL)
+	{
+		delete []m_pBuffer;
+		m_pBuffer = NULL;
+	}
+
+	DeleteObject(m_hGrabDone);
+}
+
+void __stdcall TransferEndCallback(HANDLE hCamera, DWORD dwFrameNo, DWORD dwWidth, DWORD dwHeight, WORD wColorArray, PBYTE pbyteRaw, PVOID pvContext)
+{
+	CStUsbCam* pMain = (CStUsbCam*)pvContext;
+
+	pMain->OnMemcpy(pbyteRaw, dwWidth, dwHeight);
+
+	pMain->OnSetEventHandle();
+
+	//2016-10-24 ggkim add
+	//Check Frame No.
+	int count = dwFrameNo;
+	CString tmp;
+	tmp.Format(L"%d\n",count);
+
+	OutputDebugString(tmp);
+}
+
+bool CStUsbCam::OnConnect(CString strName)
+{
+	CArray<StInterfaceInfo> arrCamInfo;
+
+	HANDLE hCamera = INVALID_HANDLE_VALUE;
+	do{
+		hCamera = StTrg_Open();
+		if(INVALID_HANDLE_VALUE != hCamera)
+		{
+			StInterfaceInfo stInfo;
+			DWORD	dwCameraID;
+			TCHAR	szCameraID[MAX_PATH];
+			memset(szCameraID, 0, sizeof(TCHAR) * MAX_PATH);
+
+			StTrg_ReadCameraUserID(hCamera, &dwCameraID, szCameraID, MAX_PATH);
+
+			stInfo.hCamera = hCamera;
+			stInfo.strName = (LPCTSTR)szCameraID;
+			arrCamInfo.Add(stInfo);
+			if (stInfo.strName == strName)
+			{
+				m_hCamera = hCamera;
+				m_strName = strName;
+			}
+		}
+	}while(INVALID_HANDLE_VALUE != hCamera);
+
+	for (int i=0; i<arrCamInfo.GetSize(); i++)
+	{
+		if (arrCamInfo.GetAt(i).hCamera == m_hCamera) continue;
+
+		StTrg_Close(arrCamInfo.GetAt(i).hCamera);
+	}
+
+	BOOL ret=FALSE;
+	m_bConnected = true;
+
+	int width=0, height=0;
+	ret = GetWidth(width);
+	if (ret == FALSE)
+	{
+		StTrg_Close(m_hCamera);
+		return false;
+	}
+
+	ret = GetHeight(height);
+	if (ret == FALSE)
+	{
+		StTrg_Close(m_hCamera);
+		return false;
+	}
+	
+	m_pBuffer = new BYTE[width*height];
+	memset(m_pBuffer, 0, width*height);
+
+	ret = StTrg_SetTransferEndCallback(m_hCamera, TransferEndCallback, this);
+	if (ret == FALSE)
+	{
+		StTrg_Close(m_hCamera);
+		return false;
+	}
+
+	return true;
+}
+bool CStUsbCam::OnDisconnect()
+{
+	if (m_hCamera == NULL) return false;
+
+	StTrg_Close(m_hCamera);
+	
+	m_hCamera = NULL;
+	m_bConnected = false;
+
+	m_strName = L"";
+
+	return true;
+}
+bool CStUsbCam::OnStartAcquisition()
+{
+	BOOL ret=FALSE;
+	//2016-10-24 ggkim add
+	//Reset Frame No.
+	ret = StTrg_ResetCounter(m_hCamera);
+	if (ret == FALSE) return false;
+
+	ret = StTrg_StartTransfer(m_hCamera);
+	if (ret == FALSE) return false;
+		
+	m_bActived = true;
+
+	return true;
+}
+bool CStUsbCam::OnStopAcquisition()
+{
+	BOOL ret=FALSE;
+	ret = StTrg_StopTransfer(m_hCamera);
+	if (ret == FALSE) return false;
+
+	m_bActived = false;
+
+	return true;
+}
+bool CStUsbCam::OnTriggerEvent()
+{
+	BOOL ret=FALSE;
+	ret = StTrg_TriggerSoftware(m_hCamera, STCAM_TRIGGER_SELECTOR_FRAME_START);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+bool CStUsbCam::SetExpModeTimed()
+{
+	BOOL ret=FALSE;
+	ret = StTrg_SetExposureMode(m_hCamera, STCAM_EXPOSURE_MODE_TIMED);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+bool CStUsbCam::SetExpModePulse()
+{
+	BOOL ret=FALSE;
+	ret = StTrg_SetExposureMode(m_hCamera, STCAM_EXPOSURE_MODE_TRIGGER_WIDTH);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+bool CStUsbCam::SetTrgModeFreeRun()
+{
+	BOOL ret=FALSE;
+	ret = StTrg_SetTriggerMode(m_hCamera, STCAM_TRIGGER_MODE_TYPE_FREE_RUN);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+bool CStUsbCam::SetTrgModeSoft()
+{
+	BOOL ret=FALSE;
+	//Set Trigger Mode
+	ret = StTrg_SetTriggerMode(m_hCamera, STCAM_TRIGGER_MODE_TYPE_TRIGGER);
+	if (ret == FALSE) return false;
+	//Set Trigger Source
+	ret = StTrg_SetTriggerSource(m_hCamera, STCAM_TRIGGER_SELECTOR_FRAME_START, STCAM_TRIGGER_SOURCE_SOFTWARE);
+	if (ret == FALSE) return false;
+	//Set Trigger Overlap
+	ret = StTrg_SetTriggerOverlap(m_hCamera, STCAM_TRIGGER_SELECTOR_FRAME_START, STCAM_TRIGGER_OVERLAP_READ_OUT);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+bool CStUsbCam::SetTrgModeHard(int nIONum, bool bPolarity)
+{
+	BOOL ret=FALSE;
+	//Set Trigger Mode
+	ret = StTrg_SetTriggerMode (m_hCamera, STCAM_TRIGGER_MODE_TYPE_TRIGGER | STCAM_TRIGGER_MODE_SOURCE_HARDWARE);
+	if (ret == FALSE) return false;
+	
+	DWORD dwDirection=0;
+	//Get IO Direction
+	ret = StTrg_GetIOPinDirection(m_hCamera, &dwDirection);
+	if (ret == FALSE) return false;
+
+	DWORD dwMask = 1 << nIONum;
+	dwDirection &= (~dwMask);
+	
+	//0:Input, 1:Output
+	//Set IO Direction
+	ret = StTrg_SetIOPinDirection(m_hCamera, dwDirection);
+	if (ret == FALSE) return false;
+
+	//Set IO Mode
+	ret = StTrg_SetIOPinMode(m_hCamera, nIONum, STCAM_IN_PIN_MODE_TRIGGER_INPUT); 
+	if (ret == FALSE) return false;
+	
+	DWORD dwPolarity=0;
+
+	//Get IO Polarity
+	ret = StTrg_GetIOPinPolarity(m_hCamera, &dwPolarity);
+	if (ret == FALSE) return false;
+
+	dwMask = 1 << nIONum;
+	if (bPolarity == true)
+		dwPolarity &= (~dwMask);
+	else
+		dwPolarity |= dwMask;
+
+	//0:Positive, 1:Negative
+	//Set IO Polarity
+	ret = StTrg_SetIOPinPolarity(m_hCamera, dwPolarity);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+
+bool CStUsbCam::SetStrobeMode(int nIONum, bool bPolarity)
+{
+	BOOL ret=FALSE;
+
+	DWORD dwDirection=0;
+	//Get IO Direction
+	ret = StTrg_GetIOPinDirection(m_hCamera, &dwDirection);
+	if (ret == FALSE) return false;
+
+	DWORD dwMask = 1 << nIONum;
+	dwDirection |= dwMask;
+
+	//0:Input, 1:Output
+	//Set IO Direction
+	ret = StTrg_SetIOPinDirection(m_hCamera, dwDirection);
+	if (ret == FALSE) return false;
+
+	//Set IO Mode
+	ret = StTrg_SetIOPinMode(m_hCamera, nIONum, STCAM_OUT_PIN_MODE_STROBE_OUTPUT_PROGRAMMABLE); 
+	if (ret == FALSE) return false;
+
+	DWORD dwPolarity=0;
+
+	//Get IO Polarity
+	ret = StTrg_GetIOPinPolarity(m_hCamera, &dwPolarity);
+	if (ret == FALSE) return false;
+
+	dwMask = 1 << nIONum;
+	if (bPolarity == true)
+		dwPolarity &= (~dwMask);
+	else
+		dwPolarity |= dwMask;
+
+	//0:Positive, 1:Negative
+	//Set IO Polarity
+	ret = StTrg_SetIOPinPolarity(m_hCamera, dwPolarity);
+	if (ret == FALSE) return false;
+	return true;
+}
+
+bool CStUsbCam::GetOffsetX(int &nValue)
+{
+	BOOL ret=FALSE;
+	WORD wScanMode=0;
+	DWORD dwOffsetX=0,dwOffsetY=0,dwWidth=0,dwHeight=0;
+	ret = StTrg_GetScanMode(m_hCamera, &wScanMode, &dwOffsetX, &dwOffsetY, &dwWidth, &dwHeight);
+	if (ret == FALSE) return false;
+
+	nValue = dwOffsetX;
+	return true;
+}
+bool CStUsbCam::GetOffsetY(int &nValue)
+{
+	BOOL ret=FALSE;
+	WORD wScanMode=0;
+	DWORD dwOffsetX=0,dwOffsetY=0,dwWidth=0,dwHeight=0;
+	ret = StTrg_GetScanMode(m_hCamera, &wScanMode, &dwOffsetX, &dwOffsetY, &dwWidth, &dwHeight);
+	if (ret == FALSE) return false;
+
+	nValue = dwOffsetY;
+	return true;
+}
+bool CStUsbCam::GetWidth(int &nValue)
+{
+	BOOL ret=FALSE;
+	WORD wScanMode=0;
+	DWORD dwOffsetX=0,dwOffsetY=0,dwWidth=0,dwHeight=0;
+	ret = StTrg_GetScanMode(m_hCamera, &wScanMode, &dwOffsetX, &dwOffsetY, &dwWidth, &dwHeight);
+	if (ret == FALSE) return false;
+
+	nValue = dwWidth;
+	return true;
+}
+bool CStUsbCam::GetHeight(int &nValue)
+{
+	BOOL ret=FALSE;
+	WORD wScanMode=0;
+	DWORD dwOffsetX=0,dwOffsetY=0,dwWidth=0,dwHeight=0;
+	ret = StTrg_GetScanMode(m_hCamera, &wScanMode, &dwOffsetX, &dwOffsetY, &dwWidth, &dwHeight);
+	if (ret == FALSE) return false;
+
+	nValue = dwHeight;
+	return true;
+}
+
+bool CStUsbCam::GetGain(int &nValue)
+{
+	BOOL ret=FALSE;
+	WORD wGain=0;
+
+	ret = StTrg_GetGain(m_hCamera, &wGain);
+	if (ret == FALSE) return false;
+
+	nValue = wGain;
+	return true;
+}
+
+bool CStUsbCam::GetFrameRate(float &fValue)
+{
+	BOOL ret=FALSE;
+	float fps=0;
+	ret = StTrg_GetOutputFPS(m_hCamera, &fps);
+	if (ret == FALSE) return false;
+
+	fValue = fps;
+	return true;
+}
+
+bool CStUsbCam::GetExposureTimeMicroSecond(int &nValue)
+{
+	BOOL ret=FALSE;
+	float fTime=0;
+	DWORD dwClock=0;
+	ret = StTrg_GetExposureClock(m_hCamera, &dwClock);
+	if (ret == FALSE) return false;
+	ret = StTrg_GetExposureTimeFromClock(m_hCamera, dwClock, &fTime);
+	if (ret == FALSE) return false;
+
+	nValue = (int)(fTime*1000000);
+	return true;
+}
+
+bool CStUsbCam::SetOffsetX(int nValue)
+{
+	BOOL ret=FALSE;
+	WORD wScanMode=0;
+	DWORD dwOffsetX=0,dwOffsetY=0,dwWidth=0,dwHeight=0;
+	ret = StTrg_GetScanMode(m_hCamera, &wScanMode, &dwOffsetX, &dwOffsetY, &dwWidth, &dwHeight);
+
+	dwOffsetX = nValue;
+	ret = StTrg_SetScanMode(m_hCamera, wScanMode, dwOffsetX, dwOffsetY, dwWidth, dwHeight);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+bool CStUsbCam::SetOffsetY(int nValue)
+{
+	BOOL ret=FALSE;
+	WORD wScanMode=0;
+	DWORD dwOffsetX=0,dwOffsetY=0,dwWidth=0,dwHeight=0;
+	ret = StTrg_GetScanMode(m_hCamera, &wScanMode, &dwOffsetX, &dwOffsetY, &dwWidth, &dwHeight);
+
+	dwOffsetY = nValue;
+	ret = StTrg_SetScanMode(m_hCamera, wScanMode, dwOffsetX, dwOffsetY, dwWidth, dwHeight);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+bool CStUsbCam::SetWidth(int nValue)
+{
+	BOOL ret=FALSE;
+	WORD wScanMode=0;
+	DWORD dwOffsetX=0,dwOffsetY=0,dwWidth=0,dwHeight=0;
+	ret = StTrg_GetScanMode(m_hCamera, &wScanMode, &dwOffsetX, &dwOffsetY, &dwWidth, &dwHeight);
+
+	dwWidth = nValue;
+	ret = StTrg_SetScanMode(m_hCamera, wScanMode, dwOffsetX, dwOffsetY, dwWidth, dwHeight);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+bool CStUsbCam::SetHeight(int nValue)
+{
+	BOOL ret=FALSE;
+	WORD wScanMode=0;
+	DWORD dwOffsetX=0,dwOffsetY=0,dwWidth=0,dwHeight=0;
+	ret = StTrg_GetScanMode(m_hCamera, &wScanMode, &dwOffsetX, &dwOffsetY, &dwWidth, &dwHeight);
+
+	dwHeight = nValue;
+	ret = StTrg_SetScanMode(m_hCamera, wScanMode, dwOffsetX, dwOffsetY, dwWidth, dwHeight);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+
+bool CStUsbCam::SetGain(int nValue)
+{
+	BOOL ret=FALSE;
+	WORD wGain=0;
+
+	wGain = nValue;
+	ret = StTrg_SetGain(m_hCamera, wGain);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+bool CStUsbCam::SetExposureTimeMicroSecond(int nValue)
+{
+	BOOL ret=FALSE;
+	DWORD dwClock=0;
+	float fValue = (float)nValue / 1000000;
+	ret = StTrg_GetExposureClockFromTime(m_hCamera, fValue, &dwClock);
+	if (ret == FALSE) return false;
+
+	ret = StTrg_SetExposureClock(m_hCamera, dwClock);
+	if (ret == FALSE) return false;
+
+	return true;
+}
+
+bool CStUsbCam::SetStrobeDelayMicroSecond(int nValue)
+{
+	BOOL ret=FALSE;
+	DWORD dwDelay=0;
+
+	dwDelay = nValue;
+	ret = StTrg_SetTriggerTiming(m_hCamera, STCAM_TRIGGER_TIMING_STROBO_START_DELAY, dwDelay);
+	if (ret == FALSE) return false;
+	return true;
+}
+
+bool CStUsbCam::SetStrobeOnTimeMicroSecond(int nValue)
+{
+	BOOL ret=FALSE;
+	DWORD dwEnd=0;
+
+	dwEnd = nValue;
+	ret = StTrg_SetTriggerTiming(m_hCamera, STCAM_TRIGGER_TIMING_STROBO_END_DELAY, dwEnd);
+	if (ret == FALSE) return false;
+	return true;
+}
+
+bool CStUsbCam::SetMirrorMode(bool bHor, bool bVer)
+{
+	BOOL ret=FALSE;
+	BOOL HasFunc=FALSE;
+
+	// Check the functions availability by StTrg_HasFunction.
+	ret = StTrg_HasFunction(m_hCamera, STCAM_CAMERA_FUNCTION_MIRROR_HORIZONTAL | STCAM_CAMERA_FUNCTION_MIRROR_VERTICAL, &HasFunc);
+	if (ret == FALSE) return false;
+
+	BYTE mode = 0;
+	if (bHor == true)
+		mode |= STCAM_MIRROR_HORIZONTAL_CAMERA;
+	if (bVer == true)
+		mode |= STCAM_MIRROR_VERTICAL_CAMERA;
+
+	ret = StTrg_SetMirrorMode(m_hCamera,mode);
+	if (ret == FALSE) return false;	
+
+	return true;
+}
