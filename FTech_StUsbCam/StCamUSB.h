@@ -39,11 +39,11 @@ private :
 	CArray<StInterfaceInfo> m_arrCamInfo;
 };
 
-class CStUsbCam
+class CStCamUSB
 {
 public:
-	CStUsbCam(void);
-	~CStUsbCam(void);
+	CStCamUSB(void);
+	~CStCamUSB(void);
 
 public :
 	//----- Connection -----//

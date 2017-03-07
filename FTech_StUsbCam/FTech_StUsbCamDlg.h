@@ -20,7 +20,7 @@ public:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV support
 
 public :
-	CStUsbCam m_StCam[MAX_CAM];
+	CStCamUSB m_StCam[MAX_CAM];
 	bool m_bThdDisplay[MAX_CAM];
 	BITMAPINFO *m_pBitmapInfo[MAX_CAM];
 	void OnCreateBmpInfo(int nIndex, int nWidth, int nHeight, int nBpp);

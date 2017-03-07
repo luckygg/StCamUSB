@@ -59,7 +59,7 @@ bool CStUSbInterface::GetDeviceName(int nIndex, CString &strValue)
 	return true;
 }
 
-CStUsbCam::CStUsbCam(void)
+CStCamUSB::CStCamUSB(void)
 {
 	m_hCamera = INVALID_HANDLE_VALUE;
 	m_bConnected = false;
@@ -71,7 +71,7 @@ CStUsbCam::CStUsbCam(void)
 	ResetEvent(m_hGrabDone);
 }
 
-CStUsbCam::~CStUsbCam(void)
+CStCamUSB::~CStCamUSB(void)
 {
 	OnDisconnect();
 
@@ -86,7 +86,7 @@ CStUsbCam::~CStUsbCam(void)
 
 void __stdcall TransferEndCallback(HANDLE hCamera, DWORD dwFrameNo, DWORD dwWidth, DWORD dwHeight, WORD wColorArray, PBYTE pbyteRaw, PVOID pvContext)
 {
-	CStUsbCam* pMain = (CStUsbCam*)pvContext;
+	CStCamUSB* pMain = (CStCamUSB*)pvContext;
 
 	pMain->OnMemcpy(pbyteRaw, dwWidth, dwHeight);
 
@@ -101,7 +101,7 @@ void __stdcall TransferEndCallback(HANDLE hCamera, DWORD dwFrameNo, DWORD dwWidt
 	OutputDebugString(tmp);
 }
 
-bool CStUsbCam::OnConnect(CString strName)
+bool CStCamUSB::OnConnect(CString strName)
 {
 	CArray<StInterfaceInfo> arrCamInfo;
 
@@ -171,7 +171,7 @@ bool CStUsbCam::OnConnect(CString strName)
 
 	return true;
 }
-bool CStUsbCam::OnDisconnect()
+bool CStCamUSB::OnDisconnect()
 {
 	if (m_hCamera == NULL) return false;
 
@@ -184,7 +184,7 @@ bool CStUsbCam::OnDisconnect()
 
 	return true;
 }
-bool CStUsbCam::OnStartAcquisition()
+bool CStCamUSB::OnStartAcquisition()
 {
 	BOOL ret=FALSE;
 	//2016-10-24 ggkim add
@@ -199,7 +199,7 @@ bool CStUsbCam::OnStartAcquisition()
 
 	return true;
 }
-bool CStUsbCam::OnStopAcquisition()
+bool CStCamUSB::OnStopAcquisition()
 {
 	BOOL ret=FALSE;
 	ret = StTrg_StopTransfer(m_hCamera);
@@ -209,7 +209,7 @@ bool CStUsbCam::OnStopAcquisition()
 
 	return true;
 }
-bool CStUsbCam::OnTriggerEvent()
+bool CStCamUSB::OnTriggerEvent()
 {
 	BOOL ret=FALSE;
 	ret = StTrg_TriggerSoftware(m_hCamera, STCAM_TRIGGER_SELECTOR_FRAME_START);
@@ -217,7 +217,7 @@ bool CStUsbCam::OnTriggerEvent()
 
 	return true;
 }
-bool CStUsbCam::SetExpModeTimed()
+bool CStCamUSB::SetExpModeTimed()
 {
 	BOOL ret=FALSE;
 	ret = StTrg_SetExposureMode(m_hCamera, STCAM_EXPOSURE_MODE_TIMED);
@@ -225,7 +225,7 @@ bool CStUsbCam::SetExpModeTimed()
 
 	return true;
 }
-bool CStUsbCam::SetExpModePulse()
+bool CStCamUSB::SetExpModePulse()
 {
 	BOOL ret=FALSE;
 	ret = StTrg_SetExposureMode(m_hCamera, STCAM_EXPOSURE_MODE_TRIGGER_WIDTH);
@@ -233,7 +233,7 @@ bool CStUsbCam::SetExpModePulse()
 
 	return true;
 }
-bool CStUsbCam::SetTrgModeFreeRun()
+bool CStCamUSB::SetTrgModeFreeRun()
 {
 	BOOL ret=FALSE;
 	ret = StTrg_SetTriggerMode(m_hCamera, STCAM_TRIGGER_MODE_TYPE_FREE_RUN);
@@ -241,7 +241,7 @@ bool CStUsbCam::SetTrgModeFreeRun()
 
 	return true;
 }
-bool CStUsbCam::SetTrgModeSoft()
+bool CStCamUSB::SetTrgModeSoft()
 {
 	BOOL ret=FALSE;
 	//Set Trigger Mode
@@ -256,7 +256,7 @@ bool CStUsbCam::SetTrgModeSoft()
 
 	return true;
 }
-bool CStUsbCam::SetTrgModeHard(int nIONum, bool bPolarity)
+bool CStCamUSB::SetTrgModeHard(int nIONum, bool bPolarity)
 {
 	BOOL ret=FALSE;
 	//Set Trigger Mode
@@ -300,7 +300,7 @@ bool CStUsbCam::SetTrgModeHard(int nIONum, bool bPolarity)
 	return true;
 }
 
-bool CStUsbCam::SetStrobeMode(int nIONum, bool bPolarity)
+bool CStCamUSB::SetStrobeMode(int nIONum, bool bPolarity)
 {
 	BOOL ret=FALSE;
 
@@ -340,7 +340,7 @@ bool CStUsbCam::SetStrobeMode(int nIONum, bool bPolarity)
 	return true;
 }
 
-bool CStUsbCam::GetOffsetX(int &nValue)
+bool CStCamUSB::GetOffsetX(int &nValue)
 {
 	BOOL ret=FALSE;
 	WORD wScanMode=0;
@@ -351,7 +351,7 @@ bool CStUsbCam::GetOffsetX(int &nValue)
 	nValue = dwOffsetX;
 	return true;
 }
-bool CStUsbCam::GetOffsetY(int &nValue)
+bool CStCamUSB::GetOffsetY(int &nValue)
 {
 	BOOL ret=FALSE;
 	WORD wScanMode=0;
@@ -362,7 +362,7 @@ bool CStUsbCam::GetOffsetY(int &nValue)
 	nValue = dwOffsetY;
 	return true;
 }
-bool CStUsbCam::GetWidth(int &nValue)
+bool CStCamUSB::GetWidth(int &nValue)
 {
 	BOOL ret=FALSE;
 	WORD wScanMode=0;
@@ -373,7 +373,7 @@ bool CStUsbCam::GetWidth(int &nValue)
 	nValue = dwWidth;
 	return true;
 }
-bool CStUsbCam::GetHeight(int &nValue)
+bool CStCamUSB::GetHeight(int &nValue)
 {
 	BOOL ret=FALSE;
 	WORD wScanMode=0;
@@ -385,7 +385,7 @@ bool CStUsbCam::GetHeight(int &nValue)
 	return true;
 }
 
-bool CStUsbCam::GetBpp(int &nValue)
+bool CStCamUSB::GetBpp(int &nValue)
 {
 	BOOL ret=FALSE;
 	WORD wColorArray=0;
@@ -400,7 +400,7 @@ bool CStUsbCam::GetBpp(int &nValue)
 	return true;
 }
 
-bool CStUsbCam::GetGain(int &nValue)
+bool CStCamUSB::GetGain(int &nValue)
 {
 	BOOL ret=FALSE;
 	WORD wGain=0;
@@ -412,7 +412,7 @@ bool CStUsbCam::GetGain(int &nValue)
 	return true;
 }
 
-bool CStUsbCam::GetFrameRate(float &fValue)
+bool CStCamUSB::GetFrameRate(float &fValue)
 {
 	BOOL ret=FALSE;
 	float fps=0;
@@ -423,7 +423,7 @@ bool CStUsbCam::GetFrameRate(float &fValue)
 	return true;
 }
 
-bool CStUsbCam::GetExposureTimeMicroSecond(int &nValue)
+bool CStCamUSB::GetExposureTimeMicroSecond(int &nValue)
 {
 	BOOL ret=FALSE;
 	float fTime=0;
@@ -437,7 +437,7 @@ bool CStUsbCam::GetExposureTimeMicroSecond(int &nValue)
 	return true;
 }
 
-bool CStUsbCam::SetOffsetX(int nValue)
+bool CStCamUSB::SetOffsetX(int nValue)
 {
 	BOOL ret=FALSE;
 	WORD wScanMode=0;
@@ -450,7 +450,7 @@ bool CStUsbCam::SetOffsetX(int nValue)
 
 	return true;
 }
-bool CStUsbCam::SetOffsetY(int nValue)
+bool CStCamUSB::SetOffsetY(int nValue)
 {
 	BOOL ret=FALSE;
 	WORD wScanMode=0;
@@ -463,7 +463,7 @@ bool CStUsbCam::SetOffsetY(int nValue)
 
 	return true;
 }
-bool CStUsbCam::SetWidth(int nValue)
+bool CStCamUSB::SetWidth(int nValue)
 {
 	BOOL ret=FALSE;
 	WORD wScanMode=0;
@@ -476,7 +476,7 @@ bool CStUsbCam::SetWidth(int nValue)
 
 	return true;
 }
-bool CStUsbCam::SetHeight(int nValue)
+bool CStCamUSB::SetHeight(int nValue)
 {
 	BOOL ret=FALSE;
 	WORD wScanMode=0;
@@ -490,7 +490,7 @@ bool CStUsbCam::SetHeight(int nValue)
 	return true;
 }
 
-bool CStUsbCam::SetGain(int nValue)
+bool CStCamUSB::SetGain(int nValue)
 {
 	BOOL ret=FALSE;
 	WORD wGain=0;
@@ -501,7 +501,7 @@ bool CStUsbCam::SetGain(int nValue)
 
 	return true;
 }
-bool CStUsbCam::SetExposureTimeMicroSecond(int nValue)
+bool CStCamUSB::SetExposureTimeMicroSecond(int nValue)
 {
 	BOOL ret=FALSE;
 	DWORD dwClock=0;
@@ -515,7 +515,7 @@ bool CStUsbCam::SetExposureTimeMicroSecond(int nValue)
 	return true;
 }
 
-bool CStUsbCam::SetStrobeDelayMicroSecond(int nValue)
+bool CStCamUSB::SetStrobeDelayMicroSecond(int nValue)
 {
 	BOOL ret=FALSE;
 	DWORD dwDelay=0;
@@ -526,7 +526,7 @@ bool CStUsbCam::SetStrobeDelayMicroSecond(int nValue)
 	return true;
 }
 
-bool CStUsbCam::SetStrobeOnTimeMicroSecond(int nValue)
+bool CStCamUSB::SetStrobeOnTimeMicroSecond(int nValue)
 {
 	BOOL ret=FALSE;
 	DWORD dwEnd=0;
@@ -537,7 +537,7 @@ bool CStUsbCam::SetStrobeOnTimeMicroSecond(int nValue)
 	return true;
 }
 
-bool CStUsbCam::SetMirrorMode(bool bHor, bool bVer)
+bool CStCamUSB::SetMirrorMode(bool bHor, bool bVer)
 {
 	BOOL ret=FALSE;
 	BOOL HasFunc=FALSE;
