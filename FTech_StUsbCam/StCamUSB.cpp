@@ -1,6 +1,10 @@
 #include "StdAfx.h"
 #include "StCamUSB.h"
 
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
 CStUSbInterface::CStUSbInterface(void)
 {
 
@@ -149,6 +153,12 @@ bool CStUsbCam::OnConnect(CString strName)
 		return false;
 	}
 	
+	if (m_pBuffer != NULL)
+	{
+		delete []m_pBuffer;
+		m_pBuffer = NULL;
+	}
+
 	m_pBuffer = new BYTE[width*height];
 	memset(m_pBuffer, 0, width*height);
 
@@ -372,6 +382,21 @@ bool CStUsbCam::GetHeight(int &nValue)
 	if (ret == FALSE) return false;
 
 	nValue = dwHeight;
+	return true;
+}
+
+bool CStUsbCam::GetBpp(int &nValue)
+{
+	BOOL ret=FALSE;
+	WORD wColorArray=0;
+	ret = StTrg_GetColorArray(m_hCamera, &wColorArray);
+	if (ret == FALSE) return false;
+
+	if (wColorArray == STCAM_COLOR_ARRAY_MONO)
+		nValue = 8;
+	else
+		nValue = 8;
+
 	return true;
 }
 

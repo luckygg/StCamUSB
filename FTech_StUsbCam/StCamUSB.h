@@ -1,3 +1,13 @@
+//----------------------------------------------------------
+// Sentech USB Camera Class
+// Trigger SDK 3.0.7 version
+//----------------------------------------------------------
+// Programmed by William Kim
+//----------------------------------------------------------
+// Last Update : 2017-03-07 11:02
+// Modified by William Kim
+//----------------------------------------------------------
+
 #pragma once
 
 #include "include/StTrgApi.h"
@@ -57,6 +67,7 @@ public :
 	bool GetOffsetY(int &nValue);
 	bool GetWidth(int &nValue);
 	bool GetHeight(int &nValue);
+	bool GetBpp(int &nValue);
 	bool GetGain(int &nValue);
 	bool GetExposureTimeMicroSecond(int &nValue);
 	bool GetFrameRate(float &fValue);
