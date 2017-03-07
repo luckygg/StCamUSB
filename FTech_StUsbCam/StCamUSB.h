@@ -10,12 +10,12 @@
 
 #pragma once
 
-#include "include/StTrgApi.h"
+#include "SDK/include/StTrgApi.h"
 
 #ifdef _WIN64
-#pragma comment(lib, "lib/x64/StTrgApi.lib")
+#pragma comment(lib, "SDK/lib/x64/StTrgApi.lib")
 #else //_WIN64
-#pragma comment(lib, "lib/x86/StTrgApi.lib")
+#pragma comment(lib, "SDK/lib/x86/StTrgApi.lib")
 #endif //_WIN64
 
 typedef struct StInterfaceInfo
